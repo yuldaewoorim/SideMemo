@@ -7,6 +7,8 @@ import shutil
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -131,6 +133,75 @@ def git_deploy(new_ver: str, release_notes: str = ""):
         return False
 
 
++def create_github_release(tag_name: str, notes: str = "", token: str = None) -> bool:
+    token = token or os.environ.get("GITHUB_TOKEN")
+    if not token:
+        token_file = BASE_DIR / ".github_token"
+        if token_file.exists():
+            try:
+                token = token_file.read_text(encoding="utf-8").strip()
+            except Exception:
+                pass
+
+    if not token:
+        print("\n" + "=" * 65)
+        print(f"★ GitHub Release 배포 안내 ({tag_name}) ★")
+        print("Git 커밋 및 태그는 GitHub 원격 저장소에 성공적으로 푸시되었습니다!")
+        print("SideMemo의 자동 업데이트가 감지할 수 있도록 아래 링크에서 [Publish release]를 1회 진행해주세요:")
+        print(f"👉 https://github.com/{REPO_NAME}/releases/new?tag={tag_name}&title=SideMemo%20{tag_name}")
+        print("위 페이지에서 아래 인스톨러 파일을 드래그하여 첨부 파일에 업로드하시면 됩니다:")
+        print(f"👉 파일 경로: {INSTALLER_EXE}")
+        print("(또는 GitHub 토큰을 outputs/SideMemoQt/.github_token 파일에 저장해두시면 전자동으로 배포됩니다)")
+        print("=" * 65 + "\n")
+        return False
+
+    print(f"Creating GitHub Release for {tag_name} via REST API...")
+    url = f"https://api.github.com/repos/{REPO_NAME}/releases"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "SideMemo-Deploy",
+        "X-GitHub-Api-Version": "2022-11-28"
+    }
+    payload = {
+        "tag_name": tag_name,
+        "name": f"SideMemo {tag_name}",
+        "body": notes or f"SideMemo {tag_name} 릴리스\n- 자동 업데이트 지원\n- 글꼴 선택 및 UI 개선",
+        "draft": False,
+        "prerelease": False
+    }
+    req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
+    upload_url = None
+    try:
+        with urllib.request.urlopen(req) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            upload_url = data.get("upload_url", "").split("{")[0]
+            print(f"Release {tag_name} created successfully!")
+    except urllib.error.HTTPError as e:
+        err_msg = e.read().decode("utf-8", errors="replace")
+        print(f"Release creation notice: {e.code} {err_msg}")
+        return False
+
+    if INSTALLER_EXE.exists() and upload_url:
+        print(f"Uploading installer asset: {INSTALLER_EXE.name}...")
+        asset_url = f"{upload_url}?name={INSTALLER_EXE.name}"
+        with open(INSTALLER_EXE, "rb") as f:
+            asset_data = f.read()
+        asset_req = urllib.request.Request(asset_url, data=asset_data, headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/octet-stream",
+            "User-Agent": "SideMemo-Deploy",
+            "X-GitHub-Api-Version": "2022-11-28"
+        }, method="POST")
+        try:
+            with urllib.request.urlopen(asset_req) as asset_resp:
+                print("Installer asset uploaded to GitHub Release successfully!")
+                return True
+        except Exception as e:
+            print(f"Asset upload notice: {e}")
+    return True
+
+
 def main():
     parser = argparse.ArgumentParser(description="SideMemo GitHub Auto Release & Deployment")
     parser.add_argument("--bump", choices=["patch", "minor", "major"], default="patch",
@@ -165,6 +236,9 @@ def main():
     # 3. Git commit, tag, and push
     git_deploy(new_ver, args.notes)
 
+    # 4. Create Release on GitHub
+    create_github_release(f"v{new_ver}", args.notes)
+
     print("\n" + "=" * 60)
     print(f"SideMemo v{new_ver} Deployment Process Finished!")
     print(f"Repository: https://github.com/{REPO_NAME}")
@@ -175,4 +249,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

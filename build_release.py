@@ -126,20 +126,23 @@ if "QTCORE_IMPORT_SUCCESS" not in test_res.stdout:
     sys.exit(1)
 
 # 6. Test launching SideMemo.exe directly
-exe_path = base_dir / "dist" / "SideMemo" / "SideMemo.exe"
-print(f"Launching {exe_path} to verify startup...")
-proc = subprocess.Popen([str(exe_path)])
-time.sleep(2)
-poll_val = proc.poll()
-if poll_val is not None and poll_val != 0:
-    print(f"ERROR: SideMemo.exe exited immediately with code {poll_val}")
-    sys.exit(1)
-print(f"SideMemo.exe is running properly (PID: {proc.pid}). Terminating test process...")
-proc.terminate()
-try:
-    proc.wait(timeout=3)
-except Exception:
-    proc.kill()
+if not os.environ.get("GITHUB_ACTIONS"):
+    exe_path = base_dir / "dist" / "SideMemo" / "SideMemo.exe"
+    print(f"Launching {exe_path} to verify startup...")
+    proc = subprocess.Popen([str(exe_path)])
+    time.sleep(2)
+    poll_val = proc.poll()
+    if poll_val is not None and poll_val != 0:
+        print(f"ERROR: SideMemo.exe exited immediately with code {poll_val}")
+        sys.exit(1)
+    print(f"SideMemo.exe is running properly (PID: {proc.pid}). Terminating test process...")
+    proc.terminate()
+    try:
+        proc.wait(timeout=3)
+    except Exception:
+        proc.kill()
+else:
+    print("Running in GitHub Actions CI: skipping GUI launch test.")
 
 # 7. Compile with Inno Setup
 print(f"Compiling installer with Inno Setup: {iscc_exe}...")

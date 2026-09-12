@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -41,4 +42,3 @@ jobs:
           prerelease: false
           generate_release_notes: true
           files: installer/SideMemo-Setup.exe
-
