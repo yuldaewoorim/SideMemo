@@ -6,9 +6,24 @@ import subprocess
 import time
 from pathlib import Path
 
-base_dir = Path(r"C:\Users\열대우림\Documents\Codex\2026-08-15\ghk\outputs\SideMemoQt").resolve()
+base_dir = Path(__file__).resolve().parent
 python_exe = sys.executable
-iscc_exe = Path(r"C:\Users\열대우림\AppData\Local\Programs\Inno Setup 6\ISCC.exe")
+
+def find_iscc() -> Path:
+    candidates = [
+        Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Inno Setup 6" / "ISCC.exe",
+        Path(r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe"),
+        Path(r"C:\Program Files\Inno Setup 6\ISCC.exe"),
+    ]
+    which_iscc = shutil.which("ISCC") or shutil.which("iscc")
+    if which_iscc:
+        candidates.insert(0, Path(which_iscc))
+    for c in candidates:
+        if c and Path(c).is_file():
+            return Path(c)
+    return candidates[0]
+
+iscc_exe = find_iscc()
 
 print(f"Base dir: {base_dir}")
 print(f"Python: {python_exe}")
@@ -60,7 +75,7 @@ cmd = [
     "--icon", "app.ico",
     "sidememo.py"
 ]
-res = subprocess.run(cmd, cwd=str(base_dir), env=env, capture_output=True, text=True)
+res = subprocess.run(cmd, cwd=str(base_dir), env=env, capture_output=True, encoding="utf-8", errors="replace")
 if res.returncode != 0:
     print("PyInstaller ERROR:")
     print(res.stdout[-1500:])
@@ -102,7 +117,7 @@ os.add_dll_directory(r'{dist_internal / "PySide6"}')
 from PySide6 import QtCore, QtWidgets, QtGui
 print('QTCORE_IMPORT_SUCCESS: Qt Version', QtCore.__version__)
 """
-test_res = subprocess.run([python_exe, "-c", verify_py], capture_output=True, text=True)
+test_res = subprocess.run([python_exe, "-c", verify_py], capture_output=True, encoding="utf-8", errors="replace")
 print("Import test output:", test_res.stdout.strip())
 if test_res.stderr.strip():
     print("Import test stderr:", test_res.stderr.strip())
@@ -129,7 +144,7 @@ except Exception:
 # 7. Compile with Inno Setup
 print(f"Compiling installer with Inno Setup: {iscc_exe}...")
 iss_path = base_dir / "SideMemo.iss"
-inno_res = subprocess.run([str(iscc_exe), str(iss_path)], cwd=str(base_dir), capture_output=True, text=True)
+inno_res = subprocess.run([str(iscc_exe), str(iss_path)], cwd=str(base_dir), capture_output=True, encoding="utf-8", errors="replace")
 if inno_res.returncode != 0:
     print("Inno Setup ERROR:")
     print(inno_res.stdout[-1500:])
@@ -145,4 +160,3 @@ if installer_exe.exists():
 else:
     print("ERROR: Installer file not found after build!")
     sys.exit(1)
-
