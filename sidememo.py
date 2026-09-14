@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QColorDialog, QComboBox,
     QScrollArea, QSizePolicy, QSlider, QSpinBox, QStyle, QSystemTrayIcon, QTextEdit, QToolButton, QVBoxLayout, QWidget)
 
 APP_NAME = "SideMemo"
-APP_VERSION = "1.0.1"
+APP_VERSION = "1.0.2"
 GITHUB_REPO = "yuldaewoorim/SideMemo"
 BASE_DIR = Path(__file__).resolve().parent
 ICON_PATH = BASE_DIR / "app.ico"
@@ -152,33 +152,74 @@ class UpdateCheckWorker(QThread):
     check_failed = Signal(str)
 
     def run(self):
+        latest_tag = ""
+        release_notes = ""
+        download_url = ""
+        asset_size = 0
+        found_update = False
+        v_ok = False
+        r_ok = False
+        last_err = ""
+
+        # 1. Check version.json from GitHub raw URL (always accessible, carries custom release_notes)
         try:
-            url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
-            req = urllib.request.Request(url, headers={
+            v_url = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/version.json"
+            v_req = urllib.request.Request(v_url, headers={
+                "User-Agent": f"SideMemo-App/{APP_VERSION}",
+                "Cache-Control": "no-cache"
+            })
+            with urllib.request.urlopen(v_req, timeout=5) as resp:
+                if resp.status == 200:
+                    v_data = json.loads(resp.read().decode("utf-8"))
+                    v_ver = v_data.get("version", "").strip()
+                    v_notes = v_data.get("release_notes", "").strip()
+                    v_dl = v_data.get("download_url", "").strip()
+                    v_ok = True
+                    if parse_version(v_ver) > parse_version(APP_VERSION):
+                        latest_tag = f"v{v_ver}" if not v_ver.startswith("v") else v_ver
+                        release_notes = v_notes
+                        download_url = v_dl or f"https://github.com/{GITHUB_REPO}/releases/download/{latest_tag}/SideMemo-Setup.exe"
+                        found_update = True
+        except Exception as e:
+            last_err = str(e)
+
+        # 2. Check GitHub Releases API
+        try:
+            r_url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+            r_req = urllib.request.Request(r_url, headers={
                 "User-Agent": f"SideMemo-App/{APP_VERSION}",
                 "Accept": "application/vnd.github.v3+json"
             })
-            with urllib.request.urlopen(req, timeout=5) as resp:
+            with urllib.request.urlopen(r_req, timeout=5) as resp:
                 if resp.status == 200:
-                    data = json.loads(resp.read().decode("utf-8"))
-                    tag = data.get("tag_name", "")
-                    body = data.get("body", "새로운 버전이 출시되었습니다.")
-                    assets = data.get("assets", [])
-                    download_url = ""
-                    asset_size = 0
-                    for asset in assets:
-                        if asset.get("name", "").lower().endswith(".exe"):
-                            download_url = asset.get("browser_download_url", "")
-                            asset_size = asset.get("size", 0)
-                            break
-                    if parse_version(tag) > parse_version(APP_VERSION) and download_url:
-                        self.update_available.emit(tag, body, download_url, asset_size)
-                    else:
-                        self.already_latest.emit(APP_VERSION)
-                else:
-                    self.check_failed.emit(f"HTTP {resp.status}")
+                    r_data = json.loads(resp.read().decode("utf-8"))
+                    r_tag = r_data.get("tag_name", "").strip()
+                    r_body = r_data.get("body", "").strip()
+                    r_ok = True
+                    if parse_version(r_tag) > parse_version(APP_VERSION):
+                        latest_tag = r_tag
+                        if r_body and not release_notes:
+                            release_notes = r_body
+                        for asset in r_data.get("assets", []):
+                            if asset.get("name", "").lower().endswith(".exe"):
+                                download_url = asset.get("browser_download_url", download_url)
+                                asset_size = asset.get("size", 0)
+                                break
+                        found_update = True
         except Exception as e:
-            self.check_failed.emit(str(e))
+            if not last_err:
+                last_err = str(e)
+
+        if found_update:
+            if not release_notes:
+                release_notes = "새로운 기능 및 안정성 개선이 포함되어 있습니다."
+            if not download_url:
+                download_url = f"https://github.com/{GITHUB_REPO}/releases/download/{latest_tag}/SideMemo-Setup.exe"
+            self.update_available.emit(latest_tag, release_notes, download_url, asset_size)
+        elif v_ok or r_ok:
+            self.already_latest.emit(APP_VERSION)
+        else:
+            self.check_failed.emit(last_err or "네트워크 연결 또는 배포 릴리스 확인")
 
 
 class DownloadWorker(QThread):
@@ -196,22 +237,42 @@ class DownloadWorker(QThread):
             temp_dir = tempfile.gettempdir()
             clean_tag = self.tag_name.lstrip("vV")
             target_file = os.path.join(temp_dir, f"SideMemo-Setup-{clean_tag}.exe")
-            req = urllib.request.Request(self.download_url, headers={
-                "User-Agent": f"SideMemo-App/{APP_VERSION}"
-            })
-            with urllib.request.urlopen(req, timeout=40) as resp, open(target_file, "wb") as f:
-                total_size = int(resp.headers.get("content-length", 0))
-                downloaded = 0
-                block_size = 65536
-                while True:
-                    chunk = resp.read(block_size)
-                    if not chunk:
+            urls = [self.download_url]
+            fallback_url = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/installer/SideMemo-Setup.exe"
+            if fallback_url not in urls:
+                urls.append(fallback_url)
+
+            success = False
+            last_err = None
+            for u in urls:
+                if not u:
+                    continue
+                try:
+                    req = urllib.request.Request(u, headers={
+                        "User-Agent": f"SideMemo-App/{APP_VERSION}"
+                    })
+                    with urllib.request.urlopen(req, timeout=45) as resp, open(target_file, "wb") as f:
+                        total_size = int(resp.headers.get("content-length", 0))
+                        downloaded = 0
+                        block_size = 65536
+                        while True:
+                            chunk = resp.read(block_size)
+                            if not chunk:
+                                break
+                            f.write(chunk)
+                            downloaded += len(chunk)
+                            if total_size > 0:
+                                self.progress.emit(int((downloaded / total_size) * 100))
+                    if os.path.exists(target_file) and os.path.getsize(target_file) > 500000:
+                        success = True
                         break
-                    f.write(chunk)
-                    downloaded += len(chunk)
-                    if total_size > 0:
-                        self.progress.emit(int((downloaded / total_size) * 100))
-            self.finished.emit(target_file)
+                except Exception as e:
+                    last_err = e
+
+            if success:
+                self.finished.emit(target_file)
+            else:
+                self.error.emit(str(last_err or "다운로드에 실패했습니다."))
         except Exception as e:
             self.error.emit(str(e))
 

@@ -5,4 +5,3 @@ __pycache__/
 *.spec
 test_*.py
 installer/
-
