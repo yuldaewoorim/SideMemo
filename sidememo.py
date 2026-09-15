@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QColorDialog, QComboBox,
     QScrollArea, QSizePolicy, QSlider, QSpinBox, QStyle, QSystemTrayIcon, QTextEdit, QToolButton, QVBoxLayout, QWidget)
 
 APP_NAME = "SideMemo"
-APP_VERSION = "1.0.2"
+APP_VERSION = "1.0.3"
 GITHUB_REPO = "yuldaewoorim/SideMemo"
 BASE_DIR = Path(__file__).resolve().parent
 ICON_PATH = BASE_DIR / "app.ico"
@@ -46,6 +46,7 @@ DIMENSIONS = {
     "3×3 (기본)": (360, 360),
     "4×4 (크게)": (460, 460),
 }
+TAB_WIDTH = 46
 DEFAULT = {"settings": {"monitor": "자동 (현재 마우스 모니터)", "position": "오른쪽", "size": "360×360 (기본)", "opacity": 100,
     "behavior": "마우스 조작", "delay": 0.3, "toggle": "메모 더블클릭(기본)", "checklist": True, "tray": True, "autostart": False},
     "notes": [{"id": "note1", "title": "NOTE 1", "theme": "노랑", "font": "맑은 고딕", "font_size": 18, "tab_slot": "1번 칸", "html": "", "attachment": ""},
@@ -558,8 +559,8 @@ class SideMemo(QMainWindow):
         for label, action in [("B",self.bold),("I",self.italic),("U",self.underline),("S",self.strike),("≡",self.align_center),("•",self.bullet),("1.",self.numbered),("☑",self.check_item)]:
             b=QToolButton(); b.setText(label); b.setFixedSize(19,22); b.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed); b.clicked.connect(action); tl.addWidget(b); self.tool_buttons[label] = b
         tl.addStretch(1); self.ice = QToolButton(); self.ice.setText("❄"); self.ice.setFixedSize(19,22); self.ice.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed); self.ice.clicked.connect(self.toggle_toolbar_lock); tl.addWidget(self.ice); self.page_layout.addWidget(self.toolbar)
-        self.tab_view = QScrollArea(); self.tab_view.setFixedWidth(55); self.tab_view.setWidgetResizable(False); self.tab_view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff); self.tab_view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff); self.tab_view.setStyleSheet("QScrollArea { border:0; background:transparent; } QScrollBar { width:0; height:0; }")
-        self.tabs = QWidget(); self.tabs.setFixedWidth(55); self.tabs.setStyleSheet("background:transparent;"); self.tabs_layout = QVBoxLayout(self.tabs); self.tabs_layout.setContentsMargins(0,6,0,6); self.tabs_layout.setSpacing(4); self.tab_view.setWidget(self.tabs)
+        self.tab_view = QScrollArea(); self.tab_view.setFixedWidth(TAB_WIDTH); self.tab_view.setWidgetResizable(False); self.tab_view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff); self.tab_view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff); self.tab_view.setStyleSheet("QScrollArea { border:0; background:transparent; } QScrollBar { width:0; height:0; }")
+        self.tabs = QWidget(); self.tabs.setFixedWidth(TAB_WIDTH); self.tabs.setStyleSheet("background:transparent;"); self.tabs_layout = QVBoxLayout(self.tabs); self.tabs_layout.setContentsMargins(0,6,0,6); self.tabs_layout.setSpacing(4); self.tab_view.setWidget(self.tabs)
         self.tab_view.installEventFilter(self); self.tab_view.viewport().installEventFilter(self); self.tabs.installEventFilter(self)
         self.root_layout.addWidget(self.page,1); self.root_layout.addWidget(self.tab_view); self.refresh_tabs()
 
@@ -567,8 +568,8 @@ class SideMemo(QMainWindow):
         while self.tabs_layout.count():
             item=self.tabs_layout.takeAt(0); w=item.widget(); w.deleteLater() if w else None
         for i,n in enumerate(self.data["notes"]):
-            bg,edge=THEMES.get(n["theme"], THEMES["노랑"]); b=QPushButton("\n".join(n["title"])); b.setFixedHeight(108); b.setStyleSheet(f"background:{bg};border:2px solid {edge};border-radius:17px;color:#26314b;font-weight:bold;font-size:12px;"); b.setProperty("tab_index", i); b.installEventFilter(self); self.tabs_layout.addWidget(b)
-        add=QPushButton("+"); add.setFixedSize(30,30); add.setStyleSheet("background:#ffffff;border:1px solid #d7d7df;border-radius:15px;font-size:18px;"); add.setProperty("is_add", True); add.installEventFilter(self); self.tabs_layout.addWidget(add, 0, Qt.AlignmentFlag.AlignHCenter); self.tabs_layout.addStretch()
+            bg,edge=THEMES.get(n["theme"], THEMES["노랑"]); b=QPushButton("\n".join(n["title"])); b.setFixedHeight(108); b.setStyleSheet(f"background:{bg};border:2px solid {edge};border-radius:14px;color:#26314b;font-weight:bold;font-size:12px;"); b.setProperty("tab_index", i); b.installEventFilter(self); self.tabs_layout.addWidget(b)
+        add=QPushButton("+"); add.setFixedSize(28,28); add.setStyleSheet("background:#ffffff;border:1px solid #d7d7df;border-radius:14px;font-size:17px;"); add.setProperty("is_add", True); add.installEventFilter(self); self.tabs_layout.addWidget(add, 0, Qt.AlignmentFlag.AlignHCenter); self.tabs_layout.addStretch()
         self.tabs.setFixedHeight(max(1, len(self.data["notes"]) * 112 + 48))
 
     def select_tab(self,index):
@@ -636,6 +637,14 @@ class SideMemo(QMainWindow):
     def numbered(self): self.editor.textCursor().insertList(QTextListFormat.Style.ListDecimal)
     def check_item(self): self.editor.textCursor().insertHtml("☐ ")
 
+    def continue_check_item(self):
+        """Add an unchecked checkbox after Enter from a checkbox line."""
+        cursor = self.editor.textCursor()
+        if not cursor.block().text().lstrip().startswith(("☐", "☑")):
+            cursor.insertText("☐ ")
+            self.editor.setTextCursor(cursor)
+            self.queue_save()
+
     def open_settings(self): SettingsDialog(self).exec()
     def create_new_note(self):
         self.save_editor(); next_idx = len(self.data["notes"]) + 1
@@ -662,7 +671,7 @@ class SideMemo(QMainWindow):
         super().leaveEvent(event)
     def collapse(self):
         if self.toolbar_locked: return
-        self.collapsed=True; self.page.hide(); self.setFixedWidth(55); self.reposition()
+        self.collapsed=True; self.page.hide(); self.setFixedWidth(TAB_WIDTH); self.reposition()
     def expand(self): self.collapsed=False; self.page.show(); self.setMinimumWidth(0); self.setMaximumWidth(16777215); self.reposition()
     def mouseDoubleClickEvent(self,event):
         if self.data["settings"]["toggle"].startswith("메모 더블클릭"): self.expand() if self.collapsed else self.collapse()
@@ -680,7 +689,7 @@ class SideMemo(QMainWindow):
             self.root_layout.addWidget(self.page, 1); self.root_layout.addWidget(self.tab_view)
 
     def reposition(self):
-        s=self.data["settings"]; self.arrange_side(); screen=QApplication.screenAt(QCursor.pos()) if s["monitor"].startswith("자동") else QApplication.screens()[max(0,min(len(QApplication.screens())-1,int(s["monitor"].split()[-1])-1))]; r=screen.availableGeometry(); page_w, page_h = DIMENSIONS.get(s.get("size"), (360, 360)); w = 55 if self.collapsed else (page_w + 55); h = page_h; x = r.left() if s["position"]=="왼쪽" else r.right()-w+1; target_y = r.top() + s["y"] if "y" in s and s["y"] is not None else r.top() + (r.height()-h)//2; min_y = r.top(); max_y = max(r.top(), r.bottom()-h+1); y = max(min_y, min(max_y, target_y)); self.setGeometry(x, y, w, h); self.update_opacity()
+        s=self.data["settings"]; self.arrange_side(); screen=QApplication.screenAt(QCursor.pos()) if s["monitor"].startswith("자동") else QApplication.screens()[max(0,min(len(QApplication.screens())-1,int(s["monitor"].split()[-1])-1))]; r=screen.availableGeometry(); page_w, page_h = DIMENSIONS.get(s.get("size"), (360, 360)); w = TAB_WIDTH if self.collapsed else (page_w + TAB_WIDTH); h = page_h; x = r.left() if s["position"]=="왼쪽" else r.right()-w+1; target_y = r.top() + s["y"] if "y" in s and s["y"] is not None else r.top() + (r.height()-h)//2; min_y = r.top(); max_y = max(r.top(), r.bottom()-h+1); y = max(min_y, min(max_y, target_y)); self.setGeometry(x, y, w, h); self.update_opacity()
 
     def finish_drag(self, end_global: QPoint):
         screen = QApplication.screenAt(end_global) or QApplication.primaryScreen()
@@ -698,6 +707,11 @@ class SideMemo(QMainWindow):
 
     def eventFilter(self, watched, event):
         if hasattr(self, "editor") and (watched is self.editor or watched is self.editor.viewport()):
+            if (watched is self.editor and event.type() == QEvent.Type.KeyPress
+                    and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
+                    and not (event.modifiers() & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.AltModifier))):
+                if self.editor.textCursor().block().text().lstrip().startswith(("☐", "☑")):
+                    QTimer.singleShot(0, self.continue_check_item)
             if event.type() == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton:
                 point = event.position().toPoint()
                 cursor = self.editor.cursorForPosition(point)
