@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QColorDialog, QComboBox,
     QScrollArea, QSizePolicy, QSlider, QSpinBox, QStyle, QSystemTrayIcon, QTextEdit, QToolButton, QVBoxLayout, QWidget)
 
 APP_NAME = "SideMemo"
-APP_VERSION = "1.0.3"
+APP_VERSION = "1.0.4"
 GITHUB_REPO = "yuldaewoorim/SideMemo"
 BASE_DIR = Path(__file__).resolve().parent
 ICON_PATH = BASE_DIR / "app.ico"
@@ -47,8 +47,8 @@ DIMENSIONS = {
     "4×4 (크게)": (460, 460),
 }
 TAB_WIDTH = 46
-DEFAULT = {"settings": {"monitor": "자동 (현재 마우스 모니터)", "position": "오른쪽", "size": "360×360 (기본)", "opacity": 100,
-    "behavior": "마우스 조작", "delay": 0.3, "toggle": "메모 더블클릭(기본)", "checklist": True, "tray": True, "autostart": False},
+DEFAULT = {"settings": {"position": "오른쪽", "size": "360×360 (기본)", "opacity": 100,
+    "behavior": "마우스 조작", "delay": 0.3, "checklist": True, "tray": True, "autostart": False},
     "notes": [{"id": "note1", "title": "NOTE 1", "theme": "노랑", "font": "맑은 고딕", "font_size": 18, "tab_slot": "1번 칸", "html": "", "attachment": ""},
     {"id": "note2", "title": "NOTE 2", "theme": "초록", "font": "맑은 고딕", "font_size": 16, "tab_slot": "2번 칸", "html": "", "attachment": ""},
     {"id": "note3", "title": "NOTE 3", "theme": "파랑", "font": "맑은 고딕", "font_size": 16, "tab_slot": "3번 칸", "html": "", "attachment": ""}]}
@@ -441,9 +441,8 @@ class SettingsDialog(QDialog):
         tc = "#e8e8ec" if self.dark else "#242a38"
         bg = "#28282f" if self.dark else "#fff"
         self.form.addWidget(QLabel(f"<div style='border:1px solid {bc};border-radius:8px;padding:12px;background:{bg};color:{tc}'><b style='font-size:18px'>▣ SideMemo</b><br>화면 좌·우 테두리에서 빠르게 열고 닫을 수 있는 메모 도구입니다.</div>"))
-        s = self.app.data["settings"]; self.monitor = QComboBox(); self.monitor.addItems(["자동 (현재 마우스 모니터)"] + [f"모니터 {i+1}" for i in range(len(QApplication.screens()))]); self.monitor.setCurrentText(s["monitor"]); self.row("표시 모니터", self.monitor, "현재 마우스가 있는 화면 또는 고정 모니터")
-        self.position = QComboBox(); self.position.addItems(["오른쪽", "왼쪽"]); self.position.setCurrentText(s["position"]); self.row("표시 위치", self.position, "메모는 선택한 모니터의 좌측 또는 우측 가장자리에만 표시됩니다.")
-        self.memo_size = QComboBox(); self.memo_size.addItems(["280×280 (작게)", "360×360 (기본)", "460×460 (크게)"]); self.memo_size.setCurrentText(s["size"]); self.row("메모 크기", self.memo_size, "메모 본문은 정사각 비율로 유지됩니다.")
+        s = self.app.data["settings"]
+        self.memo_size = QComboBox(); self.memo_size.addItems(["280×280 (작게)", "360×360 (기본)", "460×460 (크게)"]); self.memo_size.setCurrentText(s["size"]); self.row("메모 크기", self.memo_size)
         op_widget = QWidget(); op_layout = QVBoxLayout(op_widget); op_layout.setContentsMargins(0,0,0,0); op_layout.setSpacing(2)
         self.opacity = QSlider(Qt.Orientation.Horizontal); self.opacity.setRange(40, 100); self.opacity.setValue(s["opacity"])
         op_lbl_row = QHBoxLayout(); op_lbl_row.setContentsMargins(2,0,2,0)
@@ -453,11 +452,10 @@ class SettingsDialog(QDialog):
         op_lbl_row.addWidget(lbl_40); op_lbl_row.addStretch(); op_lbl_row.addWidget(lbl_100)
         op_layout.addWidget(self.opacity); op_layout.addLayout(op_lbl_row)
         self.row("메모 불투명도", op_widget)
-        self.behavior = QComboBox(); self.behavior.addItems(["마우스 조작", "항상 펼침"]); self.behavior.setCurrentText(s["behavior"]); self.row("동작 방식", self.behavior, "마우스가 메모 창 밖으로 나가면 자동으로 접힙니다.")
-        self.delay = QDoubleSpinBox(); self.delay.setRange(0.1, 5.0); self.delay.setSingleStep(0.1); self.delay.setDecimals(1); self.delay.setSuffix("초"); self.delay.setValue(float(s.get("delay", 0.3))); self.row("자동 접힘 딜레이", self.delay, "마우스가 멀어진 뒤 메모가 접히기까지 걸리는 시간")
-        self.toggle = QComboBox(); self.toggle.addItems(["메모 더블클릭(기본)", "메모 한 번 클릭"]); self.toggle.setCurrentText(s["toggle"]); self.row("빼꼼/열음 전환 방식", self.toggle, "실수 전환 방지를 위해 더블클릭을 권장합니다.")
+        self.behavior = QComboBox(); self.behavior.addItems(["마우스 조작", "항상 펼침"]); self.behavior.setCurrentText(s["behavior"]); self.row("메모 열기 방법", self.behavior)
+        self.delay = QDoubleSpinBox(); self.delay.setRange(0.1, 5.0); self.delay.setSingleStep(0.1); self.delay.setDecimals(1); self.delay.setSuffix("초"); self.delay.setValue(float(s.get("delay", 0.3))); self.row("접힘 대기 시간", self.delay)
         self.checklist = QCheckBox("체크리스트 도구 모음 사용"); self.checklist.setChecked(s["checklist"]); self.row("체크리스트", self.checklist)
-        backup = QWidget(); bl = QHBoxLayout(backup); bl.setContentsMargins(0,0,0,0); export = QPushButton("백업 내보내기"); restore = QPushButton("백업 가져오기"); export.clicked.connect(self.app.export_backup); restore.clicked.connect(self.app.import_backup); bl.addWidget(export); bl.addWidget(restore); self.row("백업 관리", backup, "메모와 첨부 이미지를 하나의 백업 파일로 관리합니다.")
+        backup = QWidget(); bl = QHBoxLayout(backup); bl.setContentsMargins(0,0,0,0); export = QPushButton("백업 내보내기"); restore = QPushButton("백업 가져오기"); export.clicked.connect(self.app.export_backup); restore.clicked.connect(self.app.import_backup); bl.addWidget(export); bl.addWidget(restore); self.row("백업 관리", backup)
         self.tray_box.setChecked(s["tray"]); self.start_box.setChecked(s["autostart"])
 
     def update_sample_font(self, font_name: str):
@@ -467,29 +465,30 @@ class SettingsDialog(QDialog):
         self.sample.setFont(QFont(font_name, 24))
 
     def note_page(self, index):
-        n = self.app.data["notes"][index]; self.form.addWidget(QLabel("이 페이지의 설정은 해당 인덱스 메모에 개별 적용됩니다."))
-        self.title_edit = QLineEdit(n["title"]); self.title_edit.setMaxLength(6); self.row("인덱스 제목", self.title_edit, "최대 6자까지 입력 가능")
+        n = self.app.data["notes"][index]
+        self.title_edit = QLineEdit(n["title"]); self.title_edit.setMaxLength(6); self.row("인덱스 제목", self.title_edit)
         total_notes = len(self.app.data["notes"])
         slot_items = [f"{i+1}번 칸" for i in range(total_notes)]
         self.slot = QComboBox(); self.slot.addItems(slot_items)
         current_slot = f"{index+1}번 칸"
-        self.slot.setCurrentText(current_slot); self.row("손잡이 위치", self.slot, "손잡이 순서를 변경하면 다른 메모들의 순서가 자동으로 조정됩니다.")
-        self.font_size = QSpinBox(); self.font_size.setRange(8, 48); self.font_size.setSuffix("px"); self.font_size.setValue(n["font_size"]); self.row("기본 글자 크기", self.font_size, "Ctrl + 휠로도 글자 크기를 조절할 수 있습니다.")
+        self.slot.setCurrentText(current_slot); self.row("인덱스 위치", self.slot)
+        self.font_size = QSpinBox(); self.font_size.setRange(8, 48); self.font_size.setSuffix("px"); self.font_size.setValue(n["font_size"]); self.row("기본 글자 크기", self.font_size)
         self.font = QFontComboBox()
         self.font.setEditable(False)
         cur_font_name = n.get("font", "맑은 고딕")
         self.font.setCurrentFont(QFont(cur_font_name))
-        self.row("글꼴", self.font, "OS에 설치된 글꼴 중에서 선택합니다.")
+        self.row("글꼴", self.font)
         self.sample = QLabel("가나다 ABC 123")
         self.update_sample_font(cur_font_name)
         self.font.currentFontChanged.connect(lambda f: self.update_sample_font(f.family()))
         self.form.addWidget(self.sample)
         colors = QWidget(); cl = QHBoxLayout(colors); cl.setContentsMargins(0,0,0,0); self.theme_buttons = []
-        for name, (bg, edge) in THEMES.items():
+        for name in ("분홍", "노랑", "초록", "파랑"):
+            bg, edge = THEMES[name]
             b = QPushButton(name); b.setStyleSheet(f"background:{bg};border:2px solid {edge if name == n['theme'] else '#d9d9dd'};"); b.clicked.connect(lambda checked=False,x=name: self.choose_theme(x)); cl.addWidget(b); self.theme_buttons.append((name,b))
-        custom = QPushButton("커스텀"); custom.clicked.connect(self.custom_color); cl.addWidget(custom); self.row("색 테마", colors)
+        custom = QPushButton("커스텀"); custom.setStyleSheet(f"border:2px solid {THEMES.get(n['theme'], THEMES['보라'])[1] if n['theme'] not in THEMES or n['theme'] == '보라' else '#d9d9dd'};"); custom.clicked.connect(self.custom_color); cl.addWidget(custom); self.row("색 테마", colors)
         self.current_theme = n["theme"]
-        attach = QWidget(); al = QHBoxLayout(attach); al.setContentsMargins(0,0,0,0); self.attach_label = QLabel(Path(n.get("attachment", "")).name or "첨부 이미지 없음"); choose = QPushButton("이미지 선택"); choose.clicked.connect(self.choose_attachment); al.addWidget(self.attach_label,1); al.addWidget(choose); self.row("첨부 이미지", attach, "선택한 파일은 SideMemo 데이터 폴더로 복사됩니다.")
+        attach = QWidget(); al = QHBoxLayout(attach); al.setContentsMargins(0,0,0,0); self.attach_label = QLabel(Path(n.get("attachment", "")).name or "첨부 이미지 없음"); choose = QPushButton("이미지 선택"); choose.clicked.connect(self.choose_attachment); al.addWidget(self.attach_label,1); al.addWidget(choose); self.row("첨부 이미지", attach)
 
     def choose_theme(self, name):
         self.current_theme = name
@@ -507,7 +506,7 @@ class SettingsDialog(QDialog):
 
     def apply(self):
         if self.note_index is None:
-            s = self.app.data["settings"]; s.update({"monitor":self.monitor.currentText(), "position":self.position.currentText(), "size":self.memo_size.currentText(), "opacity":self.opacity.value(), "behavior":self.behavior.currentText(), "delay":round(self.delay.value(), 1), "toggle":self.toggle.currentText(), "checklist":self.checklist.isChecked(), "tray":self.tray_box.isChecked(), "autostart":self.start_box.isChecked()})
+            s = self.app.data["settings"]; s.update({"size":self.memo_size.currentText(), "opacity":self.opacity.value(), "behavior":self.behavior.currentText(), "delay":round(self.delay.value(), 1), "checklist":self.checklist.isChecked(), "tray":self.tray_box.isChecked(), "autostart":self.start_box.isChecked()})
             self.app.update_autostart(); self.app.reposition(); self.app.update_opacity(); self.app.setup_tray()
         else:
             self.app.save_editor(); notes = self.app.data["notes"]
@@ -550,7 +549,7 @@ class SideMemo(QMainWindow):
         close = QToolButton(); close.setText("×"); close.clicked.connect(self.hide); header.addWidget(settings); header.addWidget(delete); header.addWidget(close); self.page_layout.addLayout(header)
         self.editor = QTextEdit(); self.editor.setAcceptRichText(True); self.editor.setFrameShape(QFrame.Shape.NoFrame); self.editor.setMinimumHeight(40); self.editor.setStyleSheet("padding:4px 14px;background:transparent;color:#26314b;"); self.editor.textChanged.connect(self.queue_save); self.editor.installEventFilter(self); self.editor.viewport().installEventFilter(self); self.page_layout.addWidget(self.editor,1)
         self.toolbar = QWidget(); self.toolbar.setObjectName("sideToolbar"); self.toolbar.setFixedHeight(34); tl = QHBoxLayout(self.toolbar); tl.setContentsMargins(4,2,4,4); tl.setSpacing(2)
-        self.peek_button = QPushButton("빼꼼"); self.peek_button.setObjectName("peekBtn"); self.peek_button.setFixedSize(36,22); self.peek_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed); self.peek_button.clicked.connect(self.toggle_toolbar_lock); tl.addWidget(self.peek_button)
+        self.ice = QPushButton("❄"); self.ice.setObjectName("peekBtn"); self.ice.setToolTip("고정"); self.ice.setAccessibleName("고정"); self.ice.setFixedSize(28,22); self.ice.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed); self.ice.clicked.connect(self.toggle_toolbar_lock); tl.addWidget(self.ice)
         # Font size controls: A- [size] A+
         self.dec_btn = QToolButton(); self.dec_btn.setObjectName("decBtn"); self.dec_btn.setText("A-"); self.dec_btn.setFixedSize(16,22); self.dec_btn.clicked.connect(self.dec_font_size); tl.addWidget(self.dec_btn)
         self.font_size_label = QLabel("16"); self.font_size_label.setObjectName("fontSizeLabel"); self.font_size_label.setFixedSize(28,20); self.font_size_label.setAlignment(Qt.AlignmentFlag.AlignCenter); tl.addWidget(self.font_size_label)
@@ -558,7 +557,7 @@ class SideMemo(QMainWindow):
         self.tool_buttons = {}
         for label, action in [("B",self.bold),("I",self.italic),("U",self.underline),("S",self.strike),("≡",self.align_center),("•",self.bullet),("1.",self.numbered),("☑",self.check_item)]:
             b=QToolButton(); b.setText(label); b.setFixedSize(19,22); b.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed); b.clicked.connect(action); tl.addWidget(b); self.tool_buttons[label] = b
-        tl.addStretch(1); self.ice = QToolButton(); self.ice.setText("❄"); self.ice.setFixedSize(19,22); self.ice.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed); self.ice.clicked.connect(self.toggle_toolbar_lock); tl.addWidget(self.ice); self.page_layout.addWidget(self.toolbar)
+        tl.addStretch(1); self.page_layout.addWidget(self.toolbar)
         self.tab_view = QScrollArea(); self.tab_view.setFixedWidth(TAB_WIDTH); self.tab_view.setWidgetResizable(False); self.tab_view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff); self.tab_view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff); self.tab_view.setStyleSheet("QScrollArea { border:0; background:transparent; } QScrollBar { width:0; height:0; }")
         self.tabs = QWidget(); self.tabs.setFixedWidth(TAB_WIDTH); self.tabs.setStyleSheet("background:transparent;"); self.tabs_layout = QVBoxLayout(self.tabs); self.tabs_layout.setContentsMargins(0,6,0,6); self.tabs_layout.setSpacing(4); self.tab_view.setWidget(self.tabs)
         self.tab_view.installEventFilter(self); self.tab_view.viewport().installEventFilter(self); self.tabs.installEventFilter(self)
@@ -674,12 +673,14 @@ class SideMemo(QMainWindow):
         self.collapsed=True; self.page.hide(); self.setFixedWidth(TAB_WIDTH); self.reposition()
     def expand(self): self.collapsed=False; self.page.show(); self.setMinimumWidth(0); self.setMaximumWidth(16777215); self.reposition()
     def mouseDoubleClickEvent(self,event):
-        if self.data["settings"]["toggle"].startswith("메모 더블클릭"): self.expand() if self.collapsed else self.collapse()
+        self.expand() if self.collapsed else self.collapse()
     def update_opacity(self): self.setWindowOpacity(self.data["settings"]["opacity"]/100)
     def migrate_settings(self):
         sizes={"2×2 (작게)":"280×280 (작게)","3×3 (기본)":"360×360 (기본)","4×4 (크게)":"460×460 (크게)",
                "250×250 (작게)":"280×280 (작게)","350×350 (기본)":"360×360 (기본)","450×450 (크게)":"460×460 (크게)"}
         self.data["settings"]["size"] = sizes.get(self.data["settings"].get("size"), self.data["settings"].get("size", "360×360 (기본)"))
+        self.data["settings"].pop("monitor", None)
+        self.data["settings"].pop("toggle", None)
 
     def arrange_side(self):
         self.root_layout.removeWidget(self.page); self.root_layout.removeWidget(self.tab_view)
@@ -689,7 +690,7 @@ class SideMemo(QMainWindow):
             self.root_layout.addWidget(self.page, 1); self.root_layout.addWidget(self.tab_view)
 
     def reposition(self):
-        s=self.data["settings"]; self.arrange_side(); screen=QApplication.screenAt(QCursor.pos()) if s["monitor"].startswith("자동") else QApplication.screens()[max(0,min(len(QApplication.screens())-1,int(s["monitor"].split()[-1])-1))]; r=screen.availableGeometry(); page_w, page_h = DIMENSIONS.get(s.get("size"), (360, 360)); w = TAB_WIDTH if self.collapsed else (page_w + TAB_WIDTH); h = page_h; x = r.left() if s["position"]=="왼쪽" else r.right()-w+1; target_y = r.top() + s["y"] if "y" in s and s["y"] is not None else r.top() + (r.height()-h)//2; min_y = r.top(); max_y = max(r.top(), r.bottom()-h+1); y = max(min_y, min(max_y, target_y)); self.setGeometry(x, y, w, h); self.update_opacity()
+        s=self.data["settings"]; self.arrange_side(); screen=QApplication.screenAt(QCursor.pos()) or QApplication.primaryScreen(); r=screen.availableGeometry(); page_w, page_h = DIMENSIONS.get(s.get("size"), (360, 360)); w = TAB_WIDTH if self.collapsed else (page_w + TAB_WIDTH); h = page_h; x = r.left() if s["position"]=="왼쪽" else r.right()-w+1; target_y = r.top() + s["y"] if "y" in s and s["y"] is not None else r.top() + (r.height()-h)//2; min_y = r.top(); max_y = max(r.top(), r.bottom()-h+1); y = max(min_y, min(max_y, target_y)); self.setGeometry(x, y, w, h); self.update_opacity()
 
     def finish_drag(self, end_global: QPoint):
         screen = QApplication.screenAt(end_global) or QApplication.primaryScreen()
