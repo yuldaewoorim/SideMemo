@@ -1,6 +1,6 @@
 ﻿[Setup]
 AppName=SideMemo
-AppVersion=1.0.4
+AppVersion=1.0.5
 DefaultDirName={autopf}\SideMemo
 DefaultGroupName=SideMemo
 OutputDir=installer
