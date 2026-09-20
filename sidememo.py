@@ -53,6 +53,19 @@ THEMES = {
     "파랑": ("#dce9fb", "#91afd8"), "초록": ("#dcf3df", "#94c99f"),
     "보라": ("#eadcf8", "#ae8ad4"),
 }
+
+def get_note_colors(note: dict) -> tuple[str, str]:
+    if not isinstance(note, dict):
+        return THEMES["노랑"]
+    theme = note.get("theme", "노랑")
+    if theme in THEMES:
+        return THEMES[theme]
+    custom = note.get("custom_color")
+    if isinstance(custom, (list, tuple)) and len(custom) == 2:
+        return (str(custom[0]), str(custom[1]))
+    if "커스텀" in THEMES:
+        return THEMES["커스텀"]
+    return THEMES["노랑"]
 DIMENSIONS = {
     "280×280 (작게)": (280, 280),
     "360×360 (기본)": (360, 360),
@@ -152,8 +165,16 @@ def data_path():
 def load_data():
     data_path()
     try:
-        with DATA_FILE.open(encoding="utf-8") as f: return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError): return json.loads(json.dumps(DEFAULT))
+        with DATA_FILE.open(encoding="utf-8") as f:
+            data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        data = json.loads(json.dumps(DEFAULT))
+    for note in data.get("notes", []):
+        if note.get("theme") == "커스텀" and "custom_color" in note:
+            cc = note["custom_color"]
+            if isinstance(cc, (list, tuple)) and len(cc) == 2:
+                THEMES["커스텀"] = (str(cc[0]), str(cc[1]))
+    return data
 
 
 def save_data(data):
@@ -432,7 +453,8 @@ class SettingsDialog(QDialog):
         gear = QPushButton("⚙"); gear.setFixedWidth(42); gear.clicked.connect(lambda: self.show_page(None)); self.tabbar_layout.addWidget(gear)
         for i, note in enumerate(self.app.data["notes"]):
             txt_col = "#d0d0d8" if self.dark else "#26314b"
-            b = QPushButton(f"● {note['title']}"); b.setStyleSheet(f"color:{txt_col}; border-color:{THEMES.get(note['theme'], THEMES['노랑'])[1]};")
+            _, edge_col = get_note_colors(note)
+            b = QPushButton(f"● {note['title']}"); b.setStyleSheet(f"color:{txt_col}; border-color:{edge_col};")
             b.clicked.connect(lambda checked=False, x=i: self.show_page(x)); self.tabbar_layout.addWidget(b)
         plus = QPushButton("+"); plus.setFixedWidth(42); plus.clicked.connect(self.add_note_from_settings); self.tabbar_layout.addWidget(plus); self.tabbar_layout.addStretch()
 
@@ -484,6 +506,8 @@ class SettingsDialog(QDialog):
 
     def note_page(self, index):
         n = self.app.data["notes"][index]
+        self.current_theme = n.get("theme", "노랑")
+        self.current_custom_color = n.get("custom_color")
         self.title_edit = QLineEdit(n["title"]); self.title_edit.setMaxLength(6); self.row("인덱스 제목", self.title_edit)
         total_notes = len(self.app.data["notes"])
         slot_items = [f"{i+1}번 칸" for i in range(total_notes)]
@@ -503,19 +527,34 @@ class SettingsDialog(QDialog):
         colors = QWidget(); cl = QHBoxLayout(colors); cl.setContentsMargins(0,0,0,0); self.theme_buttons = []
         for name in ("분홍", "노랑", "초록", "파랑"):
             bg, edge = THEMES[name]
-            b = QPushButton(name); b.setStyleSheet(f"background:{bg};border:2px solid {edge if name == n['theme'] else '#d9d9dd'};"); b.clicked.connect(lambda checked=False,x=name: self.choose_theme(x)); cl.addWidget(b); self.theme_buttons.append((name,b))
-        custom = QPushButton("커스텀"); custom.setStyleSheet(f"border:2px solid {THEMES.get(n['theme'], THEMES['보라'])[1] if n['theme'] not in THEMES or n['theme'] == '보라' else '#d9d9dd'};"); custom.clicked.connect(self.custom_color); cl.addWidget(custom); self.row("색 테마", colors)
-        self.current_theme = n["theme"]
+            b = QPushButton(name); b.setStyleSheet(f"background:{bg};border:2px solid {edge if name == self.current_theme else '#d9d9dd'};"); b.clicked.connect(lambda checked=False,x=name: self.choose_theme(x)); cl.addWidget(b); self.theme_buttons.append((name,b))
+        custom_bg, custom_edge = get_note_colors(n) if self.current_theme == "커스텀" else ("#ffffff", "#d9d9dd")
+        self.custom_btn = QPushButton("커스텀")
+        self.custom_btn.setStyleSheet(f"background:{custom_bg};border:2px solid {custom_edge if self.current_theme == '커스텀' else '#d9d9dd'};")
+        self.custom_btn.clicked.connect(self.custom_color)
+        cl.addWidget(self.custom_btn)
+        self.row("색 테마", colors)
         attach = QWidget(); al = QHBoxLayout(attach); al.setContentsMargins(0,0,0,0); self.attach_label = QLabel(Path(n.get("attachment", "")).name or "첨부 이미지 없음"); choose = QPushButton("이미지 선택"); choose.clicked.connect(self.choose_attachment); al.addWidget(self.attach_label,1); al.addWidget(choose); self.row("첨부 이미지", attach)
 
     def choose_theme(self, name):
         self.current_theme = name
-        for key, button in self.theme_buttons: button.setStyleSheet(f"background:{THEMES[key][0]};border:2px solid {THEMES[key][1] if key == name else '#d9d9dd'};")
+        for key, button in self.theme_buttons:
+            button.setStyleSheet(f"background:{THEMES[key][0]};border:2px solid {THEMES[key][1] if key == name else '#d9d9dd'};")
+        if hasattr(self, "custom_btn"):
+            self.custom_btn.setStyleSheet("background:#ffffff;border:2px solid #d9d9dd;")
 
     def custom_color(self):
         color = QColorDialog.getColor(parent=self)
         if color.isValid():
-            THEMES["커스텀"] = (color.lighter(175).name(), color.darker(115).name()); self.current_theme = "커스텀"
+            bg = color.lighter(175).name()
+            edge = color.darker(115).name()
+            self.current_theme = "커스텀"
+            self.current_custom_color = [bg, edge]
+            THEMES["커스텀"] = (bg, edge)
+            if hasattr(self, "custom_btn"):
+                self.custom_btn.setStyleSheet(f"background:{bg};border:2px solid {edge};")
+            for key, button in self.theme_buttons:
+                button.setStyleSheet(f"background:{THEMES[key][0]};border:2px solid #d9d9dd;")
 
     def choose_attachment(self):
         src, _ = QFileDialog.getOpenFileName(self, "첨부 이미지", "", "Images (*.png *.jpg *.jpeg *.bmp *.gif)")
@@ -531,6 +570,8 @@ class SettingsDialog(QDialog):
             n = notes[self.note_index]
             chosen_font = self.font.currentFont().family()
             n.update({"title":self.title_edit.text() or "새 메모", "font_size":self.font_size.value(), "font":chosen_font, "theme":self.current_theme})
+            if self.current_theme == "커스텀" and hasattr(self, "current_custom_color") and self.current_custom_color:
+                n["custom_color"] = list(self.current_custom_color)
             if hasattr(self, "attachment"): n["attachment"] = self.attachment
             try:
                 target_pos = int(self.slot.currentText().replace("번 칸", "").strip()) - 1
@@ -585,7 +626,7 @@ class SideMemo(QMainWindow):
         while self.tabs_layout.count():
             item=self.tabs_layout.takeAt(0); w=item.widget(); w.deleteLater() if w else None
         for i,n in enumerate(self.data["notes"]):
-            bg,edge=THEMES.get(n["theme"], THEMES["노랑"]); b=QPushButton("\n".join(n["title"])); b.setFixedHeight(108); b.setStyleSheet(f"background:{bg};border:2px solid {edge};border-radius:14px;color:#26314b;font-weight:bold;font-size:12px;"); b.setProperty("tab_index", i); b.installEventFilter(self); self.tabs_layout.addWidget(b)
+            bg,edge=get_note_colors(n); b=QPushButton("\n".join(n["title"])); b.setFixedHeight(108); b.setStyleSheet(f"background:{bg};border:2px solid {edge};border-radius:14px;color:#26314b;font-weight:bold;font-size:12px;"); b.setProperty("tab_index", i); b.installEventFilter(self); self.tabs_layout.addWidget(b)
         add=QPushButton("+"); add.setFixedSize(28,28); add.setStyleSheet("background:#ffffff;border:1px solid #d7d7df;border-radius:14px;font-size:17px;"); add.setProperty("is_add", True); add.installEventFilter(self); self.tabs_layout.addWidget(add, 0, Qt.AlignmentFlag.AlignHCenter); self.tabs_layout.addStretch()
         self.tabs.setFixedHeight(max(1, len(self.data["notes"]) * 112 + 48))
 
@@ -594,7 +635,7 @@ class SideMemo(QMainWindow):
         self.save_editor(); self.set_note(index)
 
     def set_note(self,index):
-        self.active = index; n = self.data["notes"][index]; bg, _ = THEMES.get(n["theme"], THEMES["노랑"])
+        self.active = index; n = self.data["notes"][index]; bg, _ = get_note_colors(n)
         self.page.setStyleSheet(f"background:{bg};")
         self.toolbar.setStyleSheet(f"background:{bg};")
         self.note_title.setText(n["title"])
