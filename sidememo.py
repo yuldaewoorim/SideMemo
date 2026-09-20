@@ -15,6 +15,24 @@ import uuid
 import zipfile
 from pathlib import Path
 
+# In frozen PyInstaller builds, register _internal and Qt library directories
+# before importing PySide6 to prevent procedure-not-found / DLL load failures.
+if getattr(sys, "frozen", False):
+    _app_root = Path(sys.executable).resolve().parent
+    _internal_candidates = [
+        _app_root / "_internal",
+        _app_root,
+    ]
+    for _base in _internal_candidates:
+        if _base.is_dir():
+            for _sub in [_base, _base / "PySide6", _base / "shiboken6"]:
+                if _sub.is_dir():
+                    try:
+                        os.add_dll_directory(str(_sub))
+                    except Exception:
+                        pass
+            os.environ["PATH"] = f"{_base};{_base / 'PySide6'};{_base / 'shiboken6'};" + os.environ.get("PATH", "")
+
 from PySide6.QtCore import QEvent, QPoint, QStandardPaths, Qt, QTimer, QThread, Signal
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtGui import QAction, QColor, QCursor, QFont, QIcon, QKeySequence, QPixmap, QTextCharFormat, QTextCursor, QTextListFormat
@@ -606,6 +624,7 @@ class SideMemo(QMainWindow):
         self.editor.blockSignals(False)
         self.refresh_tabs()
         if hasattr(self, "font_size_label"): self.font_size_label.setText(str(font_size))
+        self.apply_current_note_font()
 
     def save_editor(self):
         if self.data["notes"]: self.data["notes"][self.active]["html"] = self.editor.toHtml(); save_data(self.data)
@@ -616,7 +635,47 @@ class SideMemo(QMainWindow):
     def italic(self): self.format(lambda:self.editor.setFontItalic(not self.editor.fontItalic()))
     def underline(self): self.format(lambda:self.editor.setFontUnderline(not self.editor.fontUnderline()))
     def strike(self): self.format(lambda:self.editor.setFontStrikeOut(not self.editor.fontStrikeOut()))
-    def set_font_size(self,size): self.editor.setFontPointSize(size); self.data["notes"][self.active]["font_size"]=size; self.queue_save()
+
+    def apply_current_note_font(self):
+        """Ensure current font size and family on cursor / new line."""
+        if not self.data["notes"] or self.active >= len(self.data["notes"]):
+            return
+        n = self.data["notes"][self.active]
+        size = n.get("font_size", 16)
+        family = n.get("font", "맑은 고딕")
+        fmt = QTextCharFormat()
+        fmt.setFontPointSize(size)
+        fmt.setFontFamilies([family])
+        self.editor.mergeCurrentCharFormat(fmt)
+        self.editor.setFontPointSize(size)
+        self.editor.setFontFamily(family)
+
+    def set_font_size(self, size):
+        self.data["notes"][self.active]["font_size"] = size
+        font_family = self.data["notes"][self.active].get("font", "맑은 고딕")
+        target_font = QFont(font_family, size)
+        self.editor.setFont(target_font)
+        self.editor.document().setDefaultFont(target_font)
+        cursor = self.editor.textCursor()
+        if cursor.hasSelection():
+            fmt = QTextCharFormat()
+            fmt.setFontPointSize(size)
+            cursor.mergeCharFormat(fmt)
+            self.editor.setTextCursor(cursor)
+        else:
+            cursor.beginEditBlock()
+            cursor.select(QTextCursor.SelectionType.Document)
+            fmt = QTextCharFormat()
+            fmt.setFontPointSize(size)
+            cursor.mergeCharFormat(fmt)
+            cursor.clearSelection()
+            cursor.movePosition(QTextCursor.MoveOperation.End)
+            self.editor.setTextCursor(cursor)
+            cursor.endEditBlock()
+        self.apply_current_note_font()
+        if hasattr(self, "font_size_label"): self.font_size_label.setText(str(size))
+        self.queue_save()
+
     def dec_font_size(self):
         cur = int(self.data["notes"][self.active].get("font_size", 16))
         SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48]
@@ -642,6 +701,7 @@ class SideMemo(QMainWindow):
         if not cursor.block().text().lstrip().startswith(("☐", "☑")):
             cursor.insertText("☐ ")
             self.editor.setTextCursor(cursor)
+            self.apply_current_note_font()
             self.queue_save()
 
     def open_settings(self): SettingsDialog(self).exec()
@@ -713,6 +773,8 @@ class SideMemo(QMainWindow):
                     and not (event.modifiers() & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.AltModifier))):
                 if self.editor.textCursor().block().text().lstrip().startswith(("☐", "☑")):
                     QTimer.singleShot(0, self.continue_check_item)
+                else:
+                    QTimer.singleShot(0, self.apply_current_note_font)
             if event.type() == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton:
                 point = event.position().toPoint()
                 cursor = self.editor.cursorForPosition(point)

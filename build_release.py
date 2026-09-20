@@ -90,23 +90,26 @@ if not dist_internal.exists():
     sys.exit(1)
 
 # Remove any incompatible icudt*.dll
-for item in dist_internal.iterdir():
-    if item.name.lower().startswith("icudt") and item.suffix.lower() == ".dll":
-        try:
-            os.chmod(item, stat.S_IWRITE)
-            item.unlink()
-            print(f"Removed incompatible ICU DLL: {item.name}")
-        except Exception as e:
-            print(f"Failed to remove {item.name}: {e}")
+for search_dir in [dist_internal, dist_internal / "PySide6"]:
+    if search_dir.is_dir():
+        for item in search_dir.iterdir():
+            if item.name.lower().startswith("icudt") and item.suffix.lower() == ".dll":
+                try:
+                    os.chmod(item, stat.S_IWRITE)
+                    item.unlink()
+                    print(f"Removed incompatible ICU DLL: {item.name} from {search_dir}")
+                except Exception as e:
+                    print(f"Failed to remove {item.name}: {e}")
 
 # Copy Windows System32 ICU DLLs and ensure writeable
 for dll_name in ["icu.dll", "icuin.dll", "icuuc.dll"]:
     src = Path(sys32) / dll_name
-    dst = dist_internal / dll_name
-    if src.exists():
-        shutil.copyfile(src, dst)
-        os.chmod(dst, stat.S_IWRITE | stat.S_IREAD)
-        print(f"Copied System32 ICU DLL: {dll_name} -> {dst}")
+    for target_dir in [dist_internal, dist_internal / "PySide6"]:
+        if target_dir.is_dir() and src.exists():
+            dst = target_dir / dll_name
+            shutil.copyfile(src, dst)
+            os.chmod(dst, stat.S_IWRITE | stat.S_IREAD)
+            print(f"Copied System32 ICU DLL: {dll_name} -> {dst}")
 
 # 5. Verify QtCore import in the built environment
 print("Testing QtCore import...")

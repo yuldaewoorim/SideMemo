@@ -10,6 +10,8 @@ SolidCompression=yes
 WizardStyle=modern
 SetupIconFile=app.ico
 UninstallDisplayIcon={app}\SideMemo.exe
+CloseApplications=force
+CloseApplicationsFilter=SideMemo.exe
 
 [Tasks]
 Name: "desktopicon"; Description: "바탕 화면 바로가기 만들기"; GroupDescription: "추가 바로가기:"
@@ -17,6 +19,9 @@ Name: "desktopicon"; Description: "바탕 화면 바로가기 만들기"; GroupD
 [Files]
 ; PyInstaller one-folder build: preserve the EXE and its _internal runtime folder.
 Source: "dist\SideMemo\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[InstallDelete]
+Type: files; Name: "{app}\_internal\icudt*.dll"
 
 [Icons]
 Name: "{group}\SideMemo"; Filename: "{app}\SideMemo.exe"
